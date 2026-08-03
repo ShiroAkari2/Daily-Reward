@@ -1,2 +1,277 @@
-# Daily-Reward
-test webb
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Reward System</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --gold-color: #f59e0b;
+            --text-color: #f8fafc;
+            --danger-color: #ef4444;
+            --success-color: #22c55e;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 { margin-bottom: 5px; color: var(--accent-color); }
+        .subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 25px; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background-color: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--gold-color);
+        }
+
+        .streak-tracker {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            gap: 5px;
+        }
+
+        .day-box {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 10px 5px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+        }
+
+        .day-box.claimed {
+            background-color: rgba(34, 197, 94, 0.2);
+            border-color: var(--success-color);
+            color: var(--success-color);
+        }
+
+        .day-box.active {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
+        }
+
+        .day-box.jackpot {
+            border-color: var(--gold-color);
+            color: var(--gold-color);
+        }
+
+        .btn {
+            background-color: var(--accent-color);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        .btn:hover { opacity: 0.9; transform: translateY(-2px); }
+        .btn:disabled { background-color: #475569; cursor: not-allowed; transform: none; }
+
+        .btn-sec { background-color: transparent; border: 1px solid rgba(255,255,255,0.2); color: #fff; }
+        .btn-danger { background-color: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger-color); color: var(--danger-color); }
+
+        .alert-box {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .alert-danger { background-color: rgba(239, 68, 68, 0.2); border: 1px solid var(--danger-color); color: var(--danger-color); }
+        .alert-success { background-color: rgba(34, 197, 94, 0.2); border: 1px solid var(--success-color); color: var(--success-color); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Daily Reward</h1>
+    <div class="subtitle">Klaim hadiah setiap hari untuk menjaga streak!</div>
+
+    <div id="alertBox" class="alert-box"></div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div>Total Gold</div>
+            <div id="coinsText" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+            <div>Day Streak</div>
+            <div id="streakText" class="stat-value">0 Hari</div>
+        </div>
+    </div>
+
+    <div class="streak-tracker" id="tracker"></div>
+
+    <button id="claimBtn" class="btn" onclick="claimReward()">KLAIM REWARD HARI INI</button>
+    <button class="btn btn-sec" onclick="nextDay(1)">Lewati 1 Hari (Simulasi)</button>
+    <button class="btn btn-sec" onclick="nextDay(2)">Lewati 2 Hari (Reset Streak + Penalti)</button>
+    <button class="btn btn-danger" onclick="resetAllData()">Reset Seluruh Data Game</button>
+</div>
+
+<script>
+    // Disesuaikan agar progression lebih seimbang (tidak terlalu cepat menumpuk)
+    const REWARDS = [50, 100, 150, 250, 400, 600, 1000];
+
+    let playerData = JSON.parse(localStorage.getItem('dailyRewardData')) || {
+        coins: 0,
+        streak: 0,
+        lastClaimedDay: 0,
+        currentDay: 1
+    };
+
+    function saveData() {
+        localStorage.setItem('dailyRewardData', JSON.stringify(playerData));
+    }
+
+    function showAlert(msg, type) {
+        const alertBox = document.getElementById('alertBox');
+        alertBox.className = `alert-box alert-${type}`;
+        alertBox.innerHTML = msg;
+        alertBox.style.display = 'block';
+    }
+
+    function updateUI() {
+        document.getElementById('coinsText').innerText = playerData.coins.toLocaleString();
+        document.getElementById('streakText').innerText = playerData.streak + " Hari";
+
+        const claimBtn = document.getElementById('claimBtn');
+        if (playerData.lastClaimedDay === playerData.currentDay) {
+            claimBtn.disabled = true;
+            claimBtn.innerText = "SUDAH DIKLAIM HARI INI";
+        } else {
+            claimBtn.disabled = false;
+            claimBtn.innerText = "KLAIM REWARD HARI INI";
+        }
+
+        renderTracker();
+    }
+
+    function renderTracker() {
+        const tracker = document.getElementById('tracker');
+        tracker.innerHTML = '';
+
+        let currentStep = (playerData.streak === 0) ? 0 : ((playerData.streak - 1) % 7) + 1;
+
+        for (let i = 1; i <= 7; i++) {
+            const box = document.createElement('div');
+            box.className = 'day-box';
+            
+            if (i < currentStep) {
+                box.classList.add('claimed');
+                box.innerHTML = `H${i}<br>✓`;
+            } else if (i === currentStep && playerData.lastClaimedDay === playerData.currentDay) {
+                box.classList.add('claimed');
+                box.innerHTML = `H${i}<br>✓`;
+            } else if (i === currentStep + (playerData.lastClaimedDay === playerData.currentDay ? 1 : 0)) {
+                box.classList.add('active');
+                box.innerHTML = `H${i}<br>${REWARDS[i-1]}`;
+            } else {
+                box.innerHTML = `H${i}<br>${REWARDS[i-1]}`;
+            }
+
+            if (i === 7) box.classList.add('jackpot');
+            tracker.appendChild(box);
+        }
+    }
+
+    function claimReward() {
+        if (playerData.lastClaimedDay === playerData.currentDay) return;
+
+        // 1. Deteksi streak putus
+        let penaltyMessage = '';
+        if (playerData.currentDay > playerData.lastClaimedDay + 1 && playerData.lastClaimedDay !== 0) {
+            playerData.streak = 0;
+            
+            // Denda 20% dari total koin karena melewatkan hari
+            let penalty = Math.floor(playerData.coins * 0.20);
+            playerData.coins -= penalty;
+
+            penaltyMessage = `<br><small>Anda terkena penalti potongan 20% (-${penalty} Gold) karena tidak aktif!</small>`;
+        }
+
+        // 2. Tambah Streak & Hitung Hadiah
+        playerData.streak++;
+        let dayInWeek = (playerData.streak - 1) % 7;
+        let rewardAmount = REWARDS[dayInWeek];
+
+        playerData.coins += rewardAmount;
+        playerData.lastClaimedDay = playerData.currentDay;
+
+        // 3. Tampilkan Notifikasi
+        if (penaltyMessage !== '') {
+            showAlert(`<strong>[!] STREAK RESET!</strong> Anda melewatkan hari. Streak kembali ke Hari 1.${penaltyMessage}`, 'danger');
+        } else if (playerData.streak % 7 === 0) {
+            showAlert(`<strong>[★] BIG JACKPOT!</strong> Selamat! Anda klaim Hari ke-7 dan dapat +${rewardAmount} Gold!`, 'success');
+        } else {
+            showAlert(`<strong>[+] Berhasil!</strong> Menerima +${rewardAmount} Gold (Hari ke-${dayInWeek + 1}).`, 'success');
+        }
+
+        saveData();
+        updateUI();
+    }
+
+    function nextDay(days) {
+        playerData.currentDay += days;
+        document.getElementById('alertBox').style.display = 'none';
+        saveData();
+        updateUI();
+    }
+
+    function resetAllData() {
+        if (confirm("Apakah Anda yakin ingin menghapus semua data (Koin & Streak)?")) {
+            localStorage.removeItem('dailyRewardData');
+            playerData = { coins: 0, streak: 0, lastClaimedDay: 0, currentDay: 1 };
+            document.getElementById('alertBox').style.display = 'none';
+            updateUI();
+        }
+    }
+
+    // Inisialisasi Tampilan
+    updateUI();
+</script>
+
+</body>
+</html>
